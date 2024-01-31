@@ -3,6 +3,8 @@ import requests
 import sys
 import os
 import math
+import datetime
+from dataclasses import dataclass
 
 camera_kinds = {
     # Perseverance
@@ -39,11 +41,46 @@ camera_kinds = {
     "HELI_RTE": "Ingenuity Color Camera",
 }
 
+@dataclass
+class Image:
+    sol: int
+    attitude: tuple[float]
+    caption: str
+    sample_type: str
+    date_taken_mars: str
+    credit: str
+    date_taken_utc: datetime.datetime
+    link: str
+    drive: int
+    title: str
+    site: int
+    date_received: datetime.datetime
+
+    mast_azimuth: float
+    mast_elevation: float
+    sclk: float # no idea what this is
+    scale_factor: int
+    xyz: tuple[float]
+    subframe_rect: tuple[int]
+    dimension: tuple[int]
+
+    image_small: str
+    image_medium: str
+    image_large: str
+    image_fullres: str
+
+    camera_filter_name: str
+    camera_vector: tuple[float]
+    camera_model_component_list: str
+    camera_position: tuple[float]
+    instrument: str
+    camera_model_type: str
+
 class Mars2020:
     def __init__(self):
         pass
 
-    def download_images(self, results=100, page=1, cameras=["MCZ_LEFT", "MCZ_RIGHT"], sort="newest", outputdir="./images", metadata=False):
+    def get_data(self, results=100, page=1, cameras=["MCZ_LEFT", "MCZ_RIGHT"], sort="newest", outputdir="./images", metadata=False, autopage=False, bymission=False):
         page = page - 1
 
         for c in cameras:
@@ -62,37 +99,116 @@ class Mars2020:
 
         joined_cameras = "|".join(cameras)
 
-        req = requests.get(f"https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020,ingenuity&feedtype=json&ver=1.2&num={results}&page={page}&order={sort}&search={joined_cameras}&")
+        # I like to err on the side of.. well no error handling I guess... what's the worst that could happen?
+        api_req = requests.get(f"https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020,ingenuity&feedtype=json&ver=1.2&num={results}&page={page}&order={sort}&search={joined_cameras}&")
+        api_res = json.loads(api_req.text)
 
-        res = json.loads(req.text)
+        images = []
 
-        total_cam_results = res["total_results"]
-        total_pages = math.floor(total_cam_results / results) + 1
-
-        print("Camera(s):", ", ".join([camera_kinds[c] for c in cameras]))
-        print(f"Total pages: {total_pages:,}")
-        print(f"Total results: {total_cam_results:,}")
-
-        image_urls = []
-
-        for image in res["images"]:
+        for image in api_res["images"]:
+            attitude = tuple(image["attitude"].strip("()").split(","))
+            date_taken_utc = datetime.datetime.fromisoformat(image["date_taken_utc"])
+            date_received = datetime.datetime.fromisoformat(image["date_received"])
+            drive = image["drive"]
             sol = image["sol"]
-            full_res_url = image["image_files"]["full_res"]
-            *_, filename = full_res_url.split("/")
+            caption = image["caption"]
+            sample_type = image["sample_type"]
+            date_taken_mars = image["date_taken_mars"]
+            credit = image["credit"]
+            link = image["link"]
+            title = image["title"]
+            site = image["site"]
 
-            image_urls.append((sol, filename, full_res_url))
+            mast_azimuth = image["extended"]["mastAz"]
+            mast_elevation = image["extended"]["mastEl"]
+            sclk = image["extended"]["sclk"]
+            scale_factor = int(image["extended"]["scaleFactor"])
+            xyz = image["extended"]["xyz"]
+            subframe_rect = tuple(image["extended"]["subframeRect"].strip("()").split(","))
+            dimension = tuple(image["extended"]["dimension"].strip("()").split(","))
 
-        for sol, filename, image_url in image_urls:
-            dir_to_make = os.path.join(outputdir, str(sol))
-            output_name = os.path.join(dir_to_make, filename)
+            image_small = image["image_files"]["small"]
+            image_medium = image["image_files"]["medium"]
+            image_large = image["image_files"]["large"]
+            image_fullres = image["image_files"]["full_res"]
 
-            os.makedirs(dir_to_make, exist_ok=True)
+            camera_filter_name = image["camera"]["filter_name"]
+            camera_vector = tuple(image["camera"]["camera_vector"].strip("()").split(","))
+            camera_model_component_list = image["camera"]["camera_model_component_list"]
+            camera_position = tuple(image["camera"]["camera_position"].strip("()").split(","))
+            instrument = image["camera"]["instrument"]
+            camera_model_type = image["camera"]["camera_model_type"]
 
-            response = requests.get(image_url)
-            with open(output_name, 'wb') as f:
-                print("downloading to", output_name)
-                f.write(response.content)
+            images.append(Image(
+                sol,
+                attitude,
+                caption,
+                sample_type,
+                date_taken_mars,
+                credit,
+                date_taken_utc,
+                link,
+                drive,
+                title,
+                site,
+                date_received,
+
+                mast_azimuth,
+                mast_elevation,
+                sclk,
+                scale_factor,
+                xyz,
+                subframe_rect,
+                dimension,
+
+                image_small,
+                image_medium,
+                image_large,
+                image_fullres,
+
+                camera_filter_name,
+                camera_vector,
+                camera_model_component_list,
+                camera_position,
+                instrument,
+                camera_model_type
+            ))
+
+        return images
+
+    # def download_images(
+    # ):
+    #     total_cam_results = api_res["total_results"]
+    #     total_pages = math.floor(total_cam_results / results) + 1
+    #
+    #     print("Camera(s):", ", ".join([camera_kinds[c] for c in cameras]))
+    #     print(f"Total pages: {total_pages:,}")
+    #     print(f"Total results: {total_cam_results:,}")
+    #
+    #     for n, image in enumerate(api_res["images"]):
+    #         sol = image["sol"]
+    #         full_res_url = image["image_files"]["full_res"]
+    #         *_, basename = full_res_url.split("/")
+    #         filename, ext = basename.split(".")
+    #
+    #         image_req = requests.get(full_res_url)
+    #
+    #         dirname = os.path.join(outputdir, str(sol))
+    #         full_path_file = os.path.join(dirname, basename)
+    #
+    #         os.makedirs(dirname, exist_ok=True)
+    #
+    #         with open(full_path_file, 'wb') as f:
+    #             print(f"downloading to {full_path_file}")
+    #             f.write(image_req.content)
+    #
+    #         if metadata:
+    #             full_path_file = os.path.join(dirname, f"{filename}.json")
+    #             with open(full_path_file, 'w') as f:
+    #                 print(f"downloading to {full_path_file}")
+    #                 f.write(str(api_res["images"][n]))
 
 mars2020 = Mars2020()
 
-mars2020.download_images(cameras=["HELI_NAV"])
+for image in mars2020.get_data(cameras=["HELI_RTE"], sort="newest"):
+    print(image)
