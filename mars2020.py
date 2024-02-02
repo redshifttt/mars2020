@@ -37,6 +37,7 @@ camera_kinds = {
     "LCAM": "Lander Vision System Camera",
 
     # Ingenuity
+    # =========
     "HELI_NAV": "Ingenuity Navigation Camera",
     "HELI_RTE": "Ingenuity Color Camera",
 }
@@ -76,11 +77,16 @@ class Image:
     instrument: str
     camera_model_type: str
 
+@dataclass
+class QueryResults:
+    total_results: int
+    total_images: int
+
 class Mars2020:
     def __init__(self):
         pass
 
-    def get_data(self, results=100, page=1, cameras=["MCZ_LEFT", "MCZ_RIGHT"], sort="newest", outputdir="./images", metadata=False, autopage=False, bymission=False):
+    def get_data(self, results=100, page=1, cameras=["MCZ_LEFT", "MCZ_RIGHT"], sort="newest"):
         page = page - 1
 
         for c in cameras:
@@ -102,6 +108,9 @@ class Mars2020:
         # I like to err on the side of.. well no error handling I guess... what's the worst that could happen?
         api_req = requests.get(f"https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020,ingenuity&feedtype=json&ver=1.2&num={results}&page={page}&order={sort}&search={joined_cameras}&")
         api_res = json.loads(api_req.text)
+
+        total_results = api_res["total_results"]
+        total_images = api_res["total_images"]
 
         images = []
 
@@ -174,41 +183,4 @@ class Mars2020:
                 camera_model_type
             ))
 
-        return images
-
-    # def download_images(
-    # ):
-    #     total_cam_results = api_res["total_results"]
-    #     total_pages = math.floor(total_cam_results / results) + 1
-    #
-    #     print("Camera(s):", ", ".join([camera_kinds[c] for c in cameras]))
-    #     print(f"Total pages: {total_pages:,}")
-    #     print(f"Total results: {total_cam_results:,}")
-    #
-    #     for n, image in enumerate(api_res["images"]):
-    #         sol = image["sol"]
-    #         full_res_url = image["image_files"]["full_res"]
-    #         *_, basename = full_res_url.split("/")
-    #         filename, ext = basename.split(".")
-    #
-    #         image_req = requests.get(full_res_url)
-    #
-    #         dirname = os.path.join(outputdir, str(sol))
-    #         full_path_file = os.path.join(dirname, basename)
-    #
-    #         os.makedirs(dirname, exist_ok=True)
-    #
-    #         with open(full_path_file, 'wb') as f:
-    #             print(f"downloading to {full_path_file}")
-    #             f.write(image_req.content)
-    #
-    #         if metadata:
-    #             full_path_file = os.path.join(dirname, f"{filename}.json")
-    #             with open(full_path_file, 'w') as f:
-    #                 print(f"downloading to {full_path_file}")
-    #                 f.write(str(api_res["images"][n]))
-
-mars2020 = Mars2020()
-
-for image in mars2020.get_data(cameras=["HELI_RTE"], sort="newest"):
-    print(image)
+        return images, QueryResults(total_results, total_images)
